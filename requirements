@@ -1,0 +1,7 @@
+tensorflow==2.6
+numpy==1.19.2
+matplotlib==3.3.4
+pydoe==0.3.8
+
+
+tensorflow_probability
