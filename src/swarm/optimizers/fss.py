@@ -104,21 +104,13 @@ class fss:
 
     def make_pop(self):
         if self.xavier_init:
-            X = self._make_pop_NN()
+            X = utils.make_xavier_NN(self.pop_size,self.layer_sizes)
         else:
             X = tf.Variable(
                 tf.random.uniform([self.pop_size, self.dim], self.x_min, self.x_max)
             )
         w = tf.Variable([self.w_scale / 2] * self.pop_size)
         return X, w
-
-    def _make_pop_NN(self):
-        xavier_init_nns = []
-        for i in range(self.pop_size):
-            w, b = utils.initialize_NN(self.layer_sizes)
-            new_nn = utils.encode(w, b)
-            xavier_init_nns.append(new_nn)
-        return tf.Variable(xavier_init_nns, dtype=tf.float32)
 
     def update_steps(self):
         self.stepInd = self.stepInd - self.stepIndDecay
