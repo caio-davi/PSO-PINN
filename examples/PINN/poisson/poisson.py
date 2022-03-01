@@ -7,8 +7,8 @@ import math
 from swarm.optimizers.pso import pso
 from swarm.utils import multilayer_perceptron, decode, replacenan
 
-np.random.seed(111)
-tf.random.set_seed(111)
+np.random.seed(123456)
+tf.random.set_seed(123456)
 
 uxn = 256 + 2
 xlo = 0
@@ -100,6 +100,7 @@ for i in range(2):
 ax.append(plt.subplot2grid((3, 3), (2, 0), colspan=3))
 
 
+it_counter = n_iter
 for j in range(steps):
     start = time.time()
     opt.train()
@@ -128,10 +129,10 @@ for j in range(steps):
     ax[1][j].plot(X_, y, label="Original Function")
     ax[1][j].plot(X_, pred, "--", label="Best")
     ax[1][j].plot(X_, mean, "--", label="Mean")
-    ax[0][j].set_title(str(n_iter + j * n_iter) + " iterations", fontsize="xx-large")
+    ax[0][j].set_title(str(it_counter) + " iterations", fontsize="xx-large")
     ax[1][j].legend()
 
-    n_iter = n_iter + n_iter ^ j
+    it_counter = it_counter + n_iter
 
 
 ax[2].plot(opt.loss_history)
