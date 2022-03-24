@@ -30,11 +30,14 @@ stepInd = 0.01
 stepVol = 0.01
 w_scale = 100
 
+
 def objective(x):
     return tf.sin(2 * math.pi * x)
 
+
 def u2(x):
     return tf.cast(-4 * np.pi * np.pi * tf.sin(2 * np.pi * x), dtype=tf.float32)
+
 
 @tf.function
 def r(w, b):
@@ -42,6 +45,7 @@ def r(w, b):
     q_x = tf.gradients(q, ux)[0]
     q_xx = tf.gradients(q_x, ux)[0]
     return tf.subtract(q_xx, u2(ux))
+
 
 @tf.function
 def loss(w, b):
@@ -55,6 +59,7 @@ def loss(w, b):
 
     return tf.reduce_mean(mse_0 + mse_1 + mse_r)
 
+
 def loss_grad():
     def _loss(w, b):
         with tf.GradientTape(persistent=True) as tape:
@@ -64,7 +69,9 @@ def loss_grad():
         trainable_variables = w + b
         grads = tape.gradient(loss_value, trainable_variables)
         return loss_value, grads
+
     return _loss
+
 
 test_size = 100
 s = np.linspace(xlo, xhi, test_size)
@@ -82,9 +89,11 @@ opt = pso(
     gd_alpha=1e-5,
 )
 
+
 def nn_wrapper(particle):
     w, b = decode(particle, layer_sizes)
     return multilayer_perceptron(w, b, X)
+
 
 steps = 3
 mpl.style.use("seaborn")
