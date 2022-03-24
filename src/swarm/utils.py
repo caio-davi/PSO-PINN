@@ -155,7 +155,7 @@ def layer_init(size, method):
     if method == "he":
         _stddev = tf.sqrt(2 / (in_dim))
     if method == "lecun":
-        _stddev = tf.sqrt(2 / (in_dim))
+        _stddev = tf.sqrt(1 / (in_dim))
     return tf.Variable(
         tf.random.truncated_normal([in_dim, out_dim], stddev=_stddev),
         dtype=tf.float32,
