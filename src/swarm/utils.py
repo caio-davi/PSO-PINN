@@ -1,4 +1,6 @@
 import tensorflow as tf
+import tensorflow_probability as tfp
+from swarm import utils
 
 
 def dimensions(layers):
@@ -56,7 +58,7 @@ def progress(percent=0, width=30, metric=None, metricValue=None):
 
 
 def encode(weights, biases):
-    """Given weights and biases of a neural net, it returns a flat `tf.Tensor` with those values. This *encoded* format represents a particle in the PSO.  
+    """Given weights and biases of a neural net, it returns a flat `tf.Tensor` with those values. This *encoded* format represents a particle in the PSO.
 
     Args:
         weights (tf.Tensor): The weights of the neural net.
@@ -74,7 +76,7 @@ def encode(weights, biases):
 
 
 def decode(encoded, layers):
-    """It will decode a PSO particle into the weights and biases of a neural network. It does the inverse process of the `encode` function. 
+    """It will decode a PSO particle into the weights and biases of a neural network. It does the inverse process of the `encode` function.
 
     Args:
         encoded (tf.Tensor): The PSO particle.
@@ -102,7 +104,7 @@ def decode(encoded, layers):
 
 
 def multilayer_perceptron(weights, biases, X, x_min=-1, x_max=1):
-    """It runs the multilayer perceptron neural network. Given the weights and biases representing the neural net and the input population `X`. 
+    """It runs the multilayer perceptron neural network. Given the weights and biases representing the neural net and the input population `X`.
 
     Args:
         weights (tf.Tensor): The weights of the neural net.
@@ -130,7 +132,7 @@ def replacenan(t):
     """Replace `nan` with zeros. **CAUTION**: `nan` may be the result of an infinitely small number, but it could happen the other way around too. If the `nan` was the result of an infinitely big number, the zero representation would be misleading.
 
     Args:
-        t (tf.Tensor): The tensor with `nan` values. 
+        t (tf.Tensor): The tensor with `nan` values.
 
     Returns:
         tf.Tensor: Tensor with `0s` instead of `nan`.
@@ -138,29 +140,33 @@ def replacenan(t):
     return tf.where(tf.math.is_nan(t), tf.zeros_like(t), t)
 
 
-def xavier_init(size):
-    """Xavier initialization for a layer.
+def layer_init(size, method):
+    """Initialization for normalized a layer.
 
     Args:
         size (int): The layer size.
 
     Returns:
-        tf.Tensor: The xavier weights for the layer. 
+        tf.Tensor: The weights for the layer.
     """
     in_dim = size[0]
     out_dim = size[1]
-    xavier_stddev = tf.sqrt(2 / (in_dim + out_dim))
+    _stddev = tf.sqrt(6 / (in_dim + out_dim))
+    if method == "he":
+        _stddev = tf.sqrt(2 / (in_dim))
+    if method == "lecun":
+        _stddev = tf.sqrt(2 / (in_dim))
     return tf.Variable(
-        tf.random.truncated_normal([in_dim, out_dim], stddev=xavier_stddev),
+        tf.random.truncated_normal([in_dim, out_dim], stddev=_stddev),
         dtype=tf.float32,
     )
 
 
-def initialize_NN(layers):
-    """Initialize a neural network following the Xavier initialization.  
+def initialize_NN(layers, method):
+    """Initialize a neural network following the initialization given by `method`.
 
     Args:
-        layers (list): A list of `int` representing each layer size. 
+        layers (list): A list of `int` representing each layer size.
 
     Returns:
         tuple: Two `tf.Tensor` with the weights and biases of the neural net.
@@ -169,7 +175,7 @@ def initialize_NN(layers):
     biases = []
     num_layers = len(layers)
     for l in range(0, num_layers - 1):
-        W = xavier_init(size=[layers[l], layers[l + 1]])
+        W = layer_init([layers[l], layers[l + 1]], method)
         b = tf.Variable(
             tf.zeros([1, layers[l + 1]], dtype=tf.float32), dtype=tf.float32
         )
@@ -178,22 +184,75 @@ def initialize_NN(layers):
     return weights, biases
 
 
-def make_xavier_NN(pop_size, layer_sizes):
-    """Initialize multiple neural networks using Xavier initialization.
+def _build_normalized(pop_size, layer_sizes, method):
+    """Initialize multiple neural networks using a normalized initialization selected by `method`.
 
     Args:
         pop_size (int): Number of neural networks to initialize.
         layers (list): A list of `int` representing each layer size. (All the neural nets must have the same topology).
 
     Returns:
-        tf.Tensor: All the neural nets. 
+        tf.Tensor: All the neural nets.
     """
-    xavier_init_nns = []
+    init_nns = []
     for _ in range(pop_size):
-        w, b = initialize_NN(layer_sizes)
+        w, b = initialize_NN(layer_sizes, method)
         new_nn = encode(w, b)
-        xavier_init_nns.append(new_nn)
-    return tf.Variable(xavier_init_nns, dtype=tf.float32)
+        init_nns.append(new_nn)
+    return tf.Variable(init_nns, dtype=tf.float32)
+
+
+def _build_uniform(pop_size, layer_sizes, _):
+    """Initialize multiple neural networks using a uniformly distributed initialization.
+
+    Args:
+        pop_size (int): Number of neural networks to initialize.
+        layers (list): A list of `int` representing each layer size. (All the neural nets must have the same topology).
+
+    Returns:
+        tf.Tensor: All the neural nets.
+    """
+    x_min = -1
+    x_max = 1
+    dim = dimensions(layer_sizes)
+    return tf.Variable(tf.random.uniform([pop_size, dim], x_min, x_max))
+
+
+def _build_logLogistic(pop_size, layer_sizes, _):
+    """Initialize multiple neural networks using a log-logistic initialization.
+
+    Args:
+        pop_size (int): Number of neural networks to initialize.
+        layers (list): A list of `int` representing each layer size. (All the neural nets must have the same topology).
+
+    Returns:
+        tf.Tensor: All the neural nets.
+    """
+    dim = dimensions(layer_sizes)
+    dist = tfp.distributions.LogLogistic(0, 0.1)
+    return dist.sample([pop_size, dim])
+
+
+def build_NN(pop_size, layer_sizes, method):
+    """Initialize multiple neural networks using a normalized initialization selected by `method`.
+
+    Args:
+        pop_size (int): Number of neural networks to initialize.
+        layers (list): A list of `int` representing each layer size. (All the neural nets must have the same topology).
+
+    Returns:
+        tf.Tensor: All the neural nets.
+    """
+    methods = {
+        "uniform": "_build_uniform",
+        "log_logistic": "_build_logLogistic",
+        "xavier": "_build_normalized",
+        "he": "_build_normalized",
+        "lecun": "_build_normalized",
+    }
+    return getattr(utils, methods.get(method, "_build_normalized"))(
+        pop_size, layer_sizes, method
+    )
 
 
 def flat_grad(grad):
@@ -211,7 +270,7 @@ def flat_grad(grad):
     return tf.concat(flatted, 0)
 
 
-def dominance(x, y, weak = False):
+def dominance(x, y, weak=False):
     """Dominance test. True means x dominates y.
 
     Args:
@@ -222,10 +281,10 @@ def dominance(x, y, weak = False):
     Returns:
         tf.Tensor: A Tensor of type bool.
     """
-    less_equal = tf.reduce_all(tf.math.less_equal(x,y),1)
+    less_equal = tf.reduce_all(tf.math.less_equal(x, y), 1)
     if weak:
         return less_equal
-    less = tf.reduce_any(tf.math.less(x, y),1)
+    less = tf.reduce_any(tf.math.less(x, y), 1)
     return tf.logical_and(less_equal, less)
 
 
