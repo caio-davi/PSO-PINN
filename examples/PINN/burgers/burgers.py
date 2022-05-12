@@ -3,8 +3,8 @@ from numpy.polynomial.hermite import hermgauss
 import tensorflow as tf
 import time
 from pyDOE import lhs
-from swarm.optimizers.pso import pso
-from swarm.utils import multilayer_perceptron
+from swarm.optimizers.pso_adam import pso
+from swarm.utils import multilayer_perceptron, decode
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
@@ -16,7 +16,7 @@ tf.random.set_seed(12345)
 Problem Definition and Quadrature Solution
 """
 
-nu = 0.01 / np.pi  # viscosity parameter
+nu = 0.01  # / np.pi  # viscosity parameter
 
 # define grid for quadrature solution
 utn = 100
@@ -45,17 +45,21 @@ for utj in range(utn):
                 c = 2.0 * np.sqrt(nu * ut[utj])
                 top = top - qw[qj] * c * np.sin(
                     np.pi * (ux[uxj] - c * qx[qj])
-                ) * np.exp(-np.cos(np.pi * (ux[uxj] - c * qx[qj])) / (2.0 * np.pi * nu))
+                ) * np.exp(
+                    -np.cos(np.pi * (ux[uxj] - c * qx[qj]))
+                    / (2.0 * np.pi * nu)
+                )
                 bot = bot + qw[qj] * c * np.exp(
-                    -np.cos(np.pi * (ux[uxj] - c * qx[qj])) / (2.0 * np.pi * nu)
+                    -np.cos(np.pi * (ux[uxj] - c * qx[qj]))
+                    / (2.0 * np.pi * nu)
                 )
                 u_quad[uxj, utj] = top / bot
 
 
 # Algorithm parameters
-layer_sizes = [2] + 5 * [10] + [1]
-pop_size = 2000
-n_iter = 5000
+layer_sizes = [2] + 5 * [15] + [1]
+pop_size = 10
+n_iter = 6000
 
 
 # collocation points
@@ -128,14 +132,25 @@ def loss_grad():
     return _loss
 
 
+def run_swarm(swarm, X):
+    new_swarm = []
+    for particle in swarm:
+        w, b = decode(particle, layer_sizes)
+        new_swarm.append(
+            multilayer_perceptron(w, b, X_flat.astype(np.float32))
+        )
+    return tf.convert_to_tensor(new_swarm, dtype=tf.float32)
+
+
 opt = pso(
     loss_grad(),
     layer_sizes,
     n_iter,
     pop_size,
-    0.9,
-    0.8,
-    0.5,
+    0.999,
+    8e-4,
+    5e-3,
+    initialization_method="xavier",
     verbose=True,
     gd_alpha=1e-4,
 )
@@ -145,20 +160,27 @@ opt.train()
 end = time.time()
 print("\nTime elapsed: ", end - start)
 
-
-nn_w, nn_b = opt.get_best()
-
 X, T = np.meshgrid(ux, ut)
 X_flat = np.hstack((X.flatten()[:, None], T.flatten()[:, None]))
+
+nn_w, nn_b = opt.get_best()
+best = multilayer_perceptron(nn_w, nn_b, X_flat.astype(np.float32))
+
+swarm = opt.get_swarm()
+preds = run_swarm(swarm, X_flat.astype(np.float32))
+mean = tf.squeeze(tf.reduce_mean(preds, axis=0))
+var = tf.squeeze(tf.math.reduce_std(preds, axis=0))
+
 u_PINN = multilayer_perceptron(nn_w, nn_b, X_flat.astype(np.float32))
 
 """
 Comparison and Animation
 """
 
-
 u_quad_flat = u_quad.T.flatten()[:, None]
-error_u = np.linalg.norm(u_quad_flat - u_PINN, 2) / np.linalg.norm(u_quad_flat, 2)
+error_u = np.linalg.norm(u_quad_flat - u_PINN, 2) / np.linalg.norm(
+    u_quad_flat, 2
+)
 print("nu = %.2f/pi" % (np.pi * nu))
 print("L2 Error = %e" % (error_u))
 print("Last Loss: ", opt.loss_history[-1])
@@ -169,26 +191,26 @@ fps = 15  # frames/second of animation
 
 def snapshot(i):
     plt.clf()
-    # plt.ylim([-1.05,1.05])
-    plt.plot(u_quad[:, i], "b-", linewidth=3, label="Quadrature")
-    plt.plot(u_PINN[i * uxn : (i + 1) * uxn], "r--", linewidth=3, label="PINN")
-    locs, labels = plt.xticks()
-    plt.xticks(
-        np.linspace(0, uxn, 9),
-        np.round(ux[np.linspace(0, uxn - 1, 9).astype(int)] + 0.005, 2).astype("str"),
+    plt.plot(ux, u_quad[:, i], "b-", linewidth=3, label="Quadrature")
+    plt.plot(
+        ux,
+        mean[i * uxn : (i + 1) * uxn],
+        "r--",
+        linewidth=3,
+        label="PSO-PINN",
     )
-    plt.yticks(
-        np.linspace(-1.0, 1.0, 9), np.round(np.linspace(-1, 1, 9), 2).astype("str")
+    plt.fill_between(
+        ux,
+        mean[i * uxn : (i + 1) * uxn] - var[i * uxn : (i + 1) * uxn],
+        mean[i * uxn : (i + 1) * uxn] + var[i * uxn : (i + 1) * uxn],
+        color="gray",
+        alpha=0.5,
     )
     plt.xlabel("$x$", fontsize="xx-large")
     plt.ylabel("$u(t,x)$", fontsize="xx-large")
-    plt.text(
-        3,
-        -0.91,
-        r"time = {:.2f}/$\pi$".format(np.pi * i * thi / (utn - 1)),
-        fontsize=20,
-    )
     plt.grid()
+    plt.xlim(-1.02, 1.02)
+    plt.ylim(-1.02, 1.02)
     plt.legend(fontsize="x-large")
 
 
@@ -196,4 +218,4 @@ fig = plt.figure(figsize=(8, 8), dpi=150)
 # Call the animator:
 anim = animation.FuncAnimation(fig, snapshot, frames=time_steps)
 # Save the animation as an mp4. This requires ffmpeg to be installed.
-anim.save("Burgers_Demo.mp4", fps=fps)
+anim.save("Burgers_Demo.gif", fps=fps)
