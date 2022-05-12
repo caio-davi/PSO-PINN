@@ -1,7 +1,7 @@
 import tensorflow as tf
-
 from numpy.random import uniform
 from swarm import utils
+from numpy import linspace
 
 
 class pso:
@@ -16,10 +16,11 @@ class pso:
         c2=0.5,
         x_min=-1,
         x_max=1,
-        gd_alpha=0.00,
         cold_start=True,
         initialization_method=None,
         verbose=False,
+        c_decrease=False,
+        pre_trained_x=None,
     ):
         """The Particle Swarm Optimizer class. Specially built to deal with tensorflow neural networks.
 
@@ -33,7 +34,6 @@ class pso:
             c2 (float, optional): The *g-best* coeficient. Defaults to 0.5.
             x_min (int, optional): The min value for the weights generation. Defaults to -1.
             x_max (int, optional): The max value for the weights generation. Defaults to 1.
-            gd_alpha (float, optional): Learning rate for gradient descent. Defaults to 0.00, so there wouldn't have any gradient-based optimization.
             cold_start (bool, optional): Set the starting velocities to 0. Defaults to True.
             initialization_method (_type_, optional): Chooses how to initialize the Neural Net weights. Allowed to be one of "uniform", "xavier", or "log_logistic". Defaults to None, where it uses uniform initialization.
             verbose (bool, optional): Shows info during the training . Defaults to False.
@@ -49,16 +49,19 @@ class pso:
         self.x_min = x_min
         self.x_max = x_max
         self.initialization_method = initialization_method
-        self.x = self.build_swarm()
+        self.x = (
+            pre_trained_x if pre_trained_x is not None else self.build_swarm()
+        )
         self.p = self.x
         self.loss_history = []
         self.f_p, self.grads = self.fitness_fn(self.p)
         self.g = self.p[tf.math.argmin(input=self.f_p).numpy()[0]]
-        self.gd_alpha = gd_alpha
         self.cold_start = cold_start
         self.v = self.start_velocities()
         self.verbose = verbose
-        self.name = "PSO" if self.gd_alpha == 0 else "PSO-GD"
+        self.name = "PSO"
+        self.c_decrease = c_decrease
+        self.verbose_milestone = linspace(0, n_iter, 11).astype(int)
 
     def build_swarm(self):
         """Creates the swarm following the selected initialization method.
@@ -72,6 +75,10 @@ class pso:
         return utils.build_NN(
             self.pop_size, self.layer_sizes, self.initialization_method
         )
+
+    def update_pso_params(self):
+        self.c1 = self.c1 - self.c1 / self.n_iter
+        self.c2 = self.c2 - self.c2 / self.n_iter
 
     def start_velocities(self):
         """Start the velocities of each particle in the population (swarm). If 'self.cold_start' is 'TRUE', the swarm starts with velocity 0, which means stopped.
@@ -120,7 +127,7 @@ class pso:
         """Generate random values to update the particles' positions.
 
         Returns:
-            _type_: _description_
+            _type_: tf.Tensor
         """
         return uniform(0, 1, [2, self.dim])[:, None]
 
@@ -142,7 +149,6 @@ class pso:
             self.b * self.v
             + self.c1 * r1 * (self.p - self.x)
             + self.c2 * r2 * (self.g - self.x)
-            - self.gd_alpha * self.grads
         )
         self.x = self.x + self.v
         self.update_p_best()
@@ -152,7 +158,9 @@ class pso:
         """The particle swarm optimization. The PSO will optimize the weights according to the losses of the neural network, so this process is actually the neural network training."""
         for i in range(self.n_iter):
             self.step()
-            if self.verbose and i % (self.n_iter / 10) == 0:
+            if self.c_decrease:
+                self.update_pso_params()
+            if self.verbose and i in self.verbose_milestone:
                 utils.progress(
                     (i / self.n_iter) * 100,
                     metric="loss",
@@ -177,3 +185,11 @@ class pso:
             tf.Tensor: The positions of each particle.
         """
         return self.x
+
+    def set_n_iter(self, n_iter):
+        """Set the number of iterations.
+        Args:
+            x (int): Number of iterations.
+        """
+        self.n_iter = n_iter
+        self.verbose_milestone = linspace(0, n_iter, 11).astype(int)

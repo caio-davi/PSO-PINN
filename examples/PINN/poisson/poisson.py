@@ -14,7 +14,9 @@ uxn = 256 + 2
 xlo = 0
 xhi = 1
 
-ux = tf.reshape(tf.Variable(np.linspace(xlo, xhi, uxn), dtype="float32"), [uxn, 1])
+ux = tf.reshape(
+    tf.Variable(np.linspace(xlo, xhi, uxn), dtype="float32"), [uxn, 1]
+)
 
 u = tf.sin(2 * math.pi * ux)
 
@@ -36,7 +38,9 @@ def objective(x):
 
 
 def u2(x):
-    return tf.cast(-4 * np.pi * np.pi * tf.sin(2 * np.pi * x), dtype=tf.float32)
+    return tf.cast(
+        -4 * np.pi * np.pi * tf.sin(2 * np.pi * x), dtype=tf.float32
+    )
 
 
 @tf.function
@@ -116,7 +120,9 @@ for j in range(steps):
     end = time.time()
 
     swarm = opt.get_swarm()
-    preds = tf.reshape(tf.vectorized_map(nn_wrapper, swarm), [pop_size, test_size])
+    preds = tf.reshape(
+        tf.vectorized_map(nn_wrapper, swarm), [pop_size, test_size]
+    )
 
     mean = tf.reduce_mean(replacenan(preds), axis=0)
     variance = tf.math.reduce_variance(replacenan(preds), axis=0)
