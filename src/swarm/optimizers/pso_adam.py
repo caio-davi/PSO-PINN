@@ -11,18 +11,15 @@ class pso:
         layer_sizes,
         n_iter=2000,
         pop_size=30,
-        b=0.9,
-        c1=0.8,
-        c2=0.5,
-        x_min=-1,
-        x_max=1,
-        gd_alpha=0.00,
-        cold_start=True,
+        b=0.99,
+        c1=8e-2,
+        c2=5e-1,
+        gd_alpha=5e-3,
         initialization_method=None,
         verbose=False,
         c_decrease=False,
         pre_trained_x=None,
-        beta_1=0.9,
+        beta_1=0.99,
         beta_2=0.999,
         epsilon=1e-8,
     ):
@@ -36,10 +33,7 @@ class pso:
             b (float, optional): Inertia of the particles. Defaults to 0.9.
             c1 (float, optional): The *p-best* coeficient. Defaults to 0.8.
             c2 (float, optional): The *g-best* coeficient. Defaults to 0.5.
-            x_min (int, optional): The min value for the weights generation. Defaults to -1.
-            x_max (int, optional): The max value for the weights generation. Defaults to 1.
             gd_alpha (float, optional): Learning rate for gradient descent. Defaults to 0.00, so there wouldn't have any gradient-based optimization.
-            cold_start (bool, optional): Set the starting velocities to 0. Defaults to True.
             initialization_method (_type_, optional): Chooses how to initialize the Neural Net weights. Allowed to be one of "uniform", "xavier", or "log_logistic". Defaults to None, where it uses uniform initialization.
             verbose (bool, optional): Shows info during the training . Defaults to False.
         """
@@ -51,8 +45,6 @@ class pso:
         self.b = b
         self.c1 = c1
         self.c2 = c2
-        self.x_min = x_min
-        self.x_max = x_max
         self.initialization_method = initialization_method
         self.x = (
             pre_trained_x if pre_trained_x is not None else self.build_swarm()
@@ -61,7 +53,6 @@ class pso:
         self.p, self.f_p = self.x, self.f_x
         self.loss_history = []
         self.g = self.p[tf.math.argmin(input=self.f_p).numpy()[0]]
-        self.cold_start = cold_start
         self.v = self.start_velocities()
         self.verbose = verbose
         self.c_decrease = c_decrease
@@ -90,26 +81,16 @@ class pso:
         )
 
     def update_pso_params(self):
-        """Linear decrease of the PSO params."""
         self.c1 = self.c1 - 2 * self.c1 / self.n_iter
         self.c2 = self.c2 + self.c2 / self.n_iter
 
     def start_velocities(self):
-        """Start the velocities of each particle in the population (swarm). If 'self.cold_start' is 'TRUE', the swarm starts with velocity 0, which means stopped.
+        """Start the velocities of each particle in the population (swarm) as `0`.
 
         Returns:
             tf.Tensor: The starting velocities.
         """
-        if self.cold_start:
-            return tf.zeros([self.pop_size, self.dim])
-        else:
-            return tf.Variable(
-                tf.random.uniform(
-                    [self.pop_size, self.dim],
-                    -self.x_max - self.x_min,
-                    self.x_max - self.x_min,
-                )
-            )
+        return tf.zeros([self.pop_size, self.dim])
 
     def individual_fn(self, particle):
         """Auxiliary function to get the loss of each particle.
@@ -141,7 +122,7 @@ class pso:
         """Generate random values to update the particles' positions.
 
         Returns:
-            tf.Tensor: random tensor of shape [2, self.dim]
+            _type_: tf.Tensor
         """
         return uniform(0, 1, [2, self.dim])[:, None]
 
@@ -155,11 +136,6 @@ class pso:
         self.g = self.p[tf.math.argmin(input=self.f_p).numpy()[0]]
 
     def gradient_descent(self):
-        """Return the gradients using 1st and 2nd moment. This is the original ADAM implementation.
-
-        Returns:
-            tf.tensor: gradients
-        """
         self.m1 = self.beta_1 * self.m1 + (1 - self.beta_1) * self.grads
         self.m2 = self.beta_2 * self.m2 + (1 - self.beta_2) * tf.math.square(
             self.grads
@@ -213,7 +189,7 @@ class pso:
     def set_n_iter(self, n_iter):
         """Set the number of iterations.
         Args:
-            int: Number of iterations.
+            x (int): Number of iterations.
         """
         self.n_iter = n_iter
         self.verbose_milestone = linspace(0, n_iter, 11).astype(int)
