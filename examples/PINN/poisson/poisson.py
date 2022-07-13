@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import time
 import numpy as np
 import math
-from swarm.optimizers.pso import pso
+import swarm.optimizers as optimizers
 from swarm.utils import multilayer_perceptron, decode, replacenan
 
 np.random.seed(123456)
@@ -81,7 +81,7 @@ test_size = 100
 s = np.linspace(xlo, xhi, test_size)
 X = tf.reshape(tf.Variable(s, dtype="float32"), [test_size, 1])
 
-opt = pso(
+opt = optimizers.get["pso_adam"](
     loss_grad(),
     layer_sizes,
     n_iter,
@@ -90,7 +90,7 @@ opt = pso(
     0.08,
     0.05,
     verbose=True,
-    gd_alpha=1e-5,
+    gd_alpha=1e-2,
 )
 
 
