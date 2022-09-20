@@ -132,7 +132,7 @@ def loss_grad():
     return _loss
 
 
-def run_swarm(swarm, X):
+def run_swarm(swarm, X_flat):
     new_swarm = []
     for particle in swarm:
         w, b = decode(particle, layer_sizes)
